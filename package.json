@@ -23,7 +23,7 @@
   },
   "scripts": {
     "build": "babel src --out-dir lib --source-maps",
-    "watch": "babel src --out-dir lib --watch --source-maps",
+    "watch": "babel src --out-dir lib --watch --source-maps=both",
     "prepublish": "npm run --if-present build"
   },
   "keywords": [
@@ -39,6 +39,7 @@
   },
   "dependencies": {
     "assert": "^1.4.0",
+    "electron-is-dev": "^0.1.1",
     "oauth": "^0.9.14",
     "superagent": "^1.7.2"
   },

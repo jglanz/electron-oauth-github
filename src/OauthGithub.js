@@ -1,24 +1,55 @@
 'use strict';
 
 import assert from 'assert';
-import { app, BrowserWindow } from 'electron';
+import * as electron from 'electron';
+import {BrowserWindow,app} from 'electron';
 import request from 'superagent';
 
+//const isDev = require('electron-is-dev')
+
+
 export default class AuthWindow {
-  constructor({ id, secret, scopes = [] }) {
+  constructor({ id, secret, remote = false,scopes = [], waitForApp = false }) {
     assert(id, 'Client ID is needed!');
     assert(secret, 'Client Secret is needed!');
     this.scopeQuery = scopes.length > 0 ? '&scope=' + scopes.join('%2C') : '';
     this.clientId = id;
     this.clientSecret = secret;
+    this.waitForApp = waitForApp;
+    this.remote = remote === true;
     this.window = null;
+    this.electron = (this.remote) ? electron.remote : electron;
+    this.app = this.electron.app;
+    this.BrowserWindow = this.electron.BrowserWindow;
+
   }
 
+
+
   startRequest(callback) {
-    app.on('ready', () => {
-      this.window = new BrowserWindow({ width: 800, height: 600, 'node-integration': false });
+
+    const doAuth = () => {
+      this.window = new this.BrowserWindow({
+        width: 800,
+        height: 600,
+        webPreferences: {
+          nodeIntegration: true, webSecurity: false
+        }
+      });
+
+
       var authURL = 'https://github.com/login/oauth/authorize?client_id=' + this.clientId + this.scopeQuery;
-      this.window.loadURL(authURL);
+
+      this.window.webContents.on('did-finish-load', () => {
+        this.window.show();
+        this.window.focus();
+      });
+
+      this.window.webContents.on('did-fail-load',(event,errorCode,errorDescription,validatedURL,isMainFrame) => {
+        console.error('LOAD FAILED',event,errorCode,errorDescription,validatedURL,isMainFrame);
+        callback({errorCode,errorDescription,validatedURL,isMainFrame})
+      });
+
       this.window.webContents.on('will-navigate', (event, url) => {
         this.handleCallback(url, callback);
       });
@@ -28,7 +59,11 @@ export default class AuthWindow {
       this.window.on('close', () => {
         this.window = null;
       }, false);
-    });
+
+      this.window.loadURL(authURL);
+    };
+
+    (this.waitForApp) ? this.app.on('ready', doAuth) : doAuth()
   }
 
   handleCallback(url, callback) {
@@ -49,12 +84,15 @@ export default class AuthWindow {
       client_secret: secret,
       code: code,
     }).end((err, response) => {
-      if (err) {
-        callback(err);
+      try {
+        if (err) {
+          callback(err);
+        } else {
+          callback(null, response.body.access_token, this);
+        }
+      } finally {
+        this.window.close()
       }
-
-      var access_token = response.body.access_token;
-      callback(response.body.access_token);
     });
   }
 
